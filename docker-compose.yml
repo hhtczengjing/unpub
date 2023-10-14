@@ -1,0 +1,22 @@
+version: '3.3'
+services:
+  unpub:
+    build: ./
+    container_name: unpub_server
+    environment:
+     - UNPUB_UPSTREAM=https://pub.flutter-io.cn
+     - UNPUB_HOST=http://localhost:4000
+    restart: always
+    ports:
+      - 4000:4000
+    volumes:
+      - ~/docker/unpub/unpub_packages:/app/unpub-packages
+      - ~/docker/unpub/mirror_packages:/app/mirror-packages
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:4.2.19
+    container_name: unpub_mongo 
+    restart: always
+    volumes:
+      - ~/docker/unpub/unpub_mongo:/data/db
