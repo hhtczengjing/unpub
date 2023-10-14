@@ -24,6 +24,7 @@ createServer(String opEmail) async {
   var app = unpub.App(
     metaStore: mongoStore,
     packageStore: unpub.FileStore(baseDir),
+    upstreamStore: unpub.UpstreamStore(baseDir, 'https://pub.flutter-io.cn'),
     overrideUploaderEmail: opEmail,
   );
 

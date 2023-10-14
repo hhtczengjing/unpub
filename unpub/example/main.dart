@@ -8,6 +8,7 @@ main(List<String> args) async {
   final app = unpub.App(
     metaStore: unpub.MongoStore(db),
     packageStore: unpub.FileStore('./unpub-packages'),
+    upstreamStore: unpub.UpstreamStore('./mirror-packages', 'https://pub.flutter-io.cn')
   );
 
   final server = await app.serve('0.0.0.0', 4000);

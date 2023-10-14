@@ -16,10 +16,10 @@ import 'package:unpub/src/models.dart';
 import 'package:unpub/unpub_api/lib/models.dart';
 import 'package:unpub/src/meta_store.dart';
 import 'package:unpub/src/package_store.dart';
+import 'package:unpub/src/upstream_store.dart';
 import 'utils.dart';
 import 'static/index.html.dart' as index_html;
 import 'static/main.dart.js.dart' as main_dart_js;
-
 part 'app.g.dart';
 
 class App {
@@ -31,7 +31,10 @@ class App {
   /// package(tarball) store
   final PackageStore packageStore;
 
-  /// upstream url, default: https://pub.dev
+  /// package(upstream) store
+  final UpstreamStore upstreamStore;
+
+  /// upstream url, default: https://pub.flutter-io.cn
   final String upstream;
 
   /// http(s) proxy to call googleapis (to get uploader email)
@@ -40,6 +43,9 @@ class App {
 
   /// A forward proxy uri
   final Uri? proxy_origin;
+
+  /// host url, default: http://127.0.0.1:4000
+  final String host;
 
   /// validate if the package can be published
   ///
@@ -50,16 +56,26 @@ class App {
   App({
     required this.metaStore,
     required this.packageStore,
-    this.upstream = 'https://pub.dev',
+    required this.upstreamStore,
+    this.upstream = 'https://pub.flutter-io.cn',
     this.googleapisProxy,
     this.overrideUploaderEmail,
     this.uploadValidator,
     this.proxy_origin,
+    this.host = 'http://127.0.0.1:4000'
   });
 
   static shelf.Response _okWithJson(Map<String, dynamic> data) =>
       shelf.Response.ok(
         json.encode(data),
+        headers: {
+          HttpHeaders.contentTypeHeader: ContentType.json.mimeType,
+          'Access-Control-Allow-Origin': '*'
+        },
+      );
+
+  static shelf.Response _okWithJsonString(String data) => shelf.Response.ok(
+        data,
         headers: {
           HttpHeaders.contentTypeHeader: ContentType.json.mimeType,
           'Access-Control-Allow-Origin': '*'
@@ -154,8 +170,14 @@ class App {
     var package = await metaStore.queryPackage(name);
 
     if (package == null) {
-      return shelf.Response.found(
-          Uri.parse(upstream).resolve('/api/packages/$name').toString());
+      Uri upstreamUri = Uri.parse(Uri.parse(upstream).resolve('/api/packages/$name').toString());
+      final response = await http.get(upstreamUri);
+      if (response.statusCode != 200) {
+        return shelf.Response.found(upstreamUri);
+      }
+      String responseText = response.body;
+      responseText = responseText.replaceAll(upstream, host);
+      return _okWithJsonString(responseText);
     }
 
     package.versions.sort((a, b) {
@@ -175,8 +197,7 @@ class App {
   }
 
   @Route.get('/api/packages/<name>/versions/<version>')
-  Future<shelf.Response> getVersion(
-      shelf.Request req, String name, String version) async {
+  Future<shelf.Response> getVersion(shelf.Request req, String name, String version) async {
     // Important: + -> %2B, should be decoded here
     try {
       version = Uri.decodeComponent(version);
@@ -186,9 +207,16 @@ class App {
 
     var package = await metaStore.queryPackage(name);
     if (package == null) {
-      return shelf.Response.found(Uri.parse(upstream)
+      Uri upstreamUri = Uri.parse(Uri.parse(upstream)
           .resolve('/api/packages/$name/versions/$version')
           .toString());
+      final response = await http.get(upstreamUri);
+      if (response.statusCode != 200) {
+        return shelf.Response.found(upstreamUri);
+      }
+      String responseText = response.body;
+      responseText = responseText.replaceAll(upstream, host);
+      return _okWithJsonString(responseText);
     }
 
     var packageVersion =
@@ -201,13 +229,13 @@ class App {
   }
 
   @Route.get('/packages/<name>/versions/<version>.tar.gz')
-  Future<shelf.Response> download(
-      shelf.Request req, String name, String version) async {
+  Future<shelf.Response> download(shelf.Request req, String name, String version) async {
     var package = await metaStore.queryPackage(name);
     if (package == null) {
-      return shelf.Response.found(Uri.parse(upstream)
-          .resolve('/packages/$name/versions/$version.tar.gz')
-          .toString());
+      return shelf.Response.ok(
+        await upstreamStore.download(name, version),
+        headers: {HttpHeaders.contentTypeHeader: ContentType.binary.mimeType},
+      );
     }
 
     if (isPubClient(req)) {

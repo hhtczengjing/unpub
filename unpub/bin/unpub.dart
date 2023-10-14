@@ -8,8 +8,7 @@ main(List<String> args) async {
   var parser = ArgParser();
   parser.addOption('host', abbr: 'h', defaultsTo: '0.0.0.0');
   parser.addOption('port', abbr: 'p', defaultsTo: '4000');
-  parser.addOption('database',
-      abbr: 'd', defaultsTo: 'mongodb://localhost:27017/dart_pub');
+  parser.addOption('database', abbr: 'd', defaultsTo: 'mongodb://localhost:27017/dart_pub');
   parser.addOption('proxy-origin', abbr: 'o', defaultsTo: '');
 
   var results = parser.parse(args);
@@ -29,11 +28,21 @@ main(List<String> args) async {
   await db.open();
 
   var baseDir = path.absolute('unpub-packages');
+  var mirrorDir = path.absolute('mirror-packages');
+
+  Map<String, String> envVars = Platform.environment;
+  String upstream = envVars['UNPUB_UPSTREAM'] ?? 'https://pub.flutter-io.cn';
+  String hostStr = envVars['UNPUB_HOST'] ?? 'http://${host}:${port}';
+  print('upstream: ${upstream}, host: ${hostStr}');
+  print('unpub-packages: ${baseDir}, mirror-packages: ${mirrorDir}');
 
   var app = unpub.App(
     metaStore: unpub.MongoStore(db),
     packageStore: unpub.FileStore(baseDir),
-    proxy_origin: proxy_origin.trim().isEmpty ? null : Uri.parse(proxy_origin)
+    upstreamStore: unpub.UpstreamStore(mirrorDir, upstream),
+    proxy_origin: proxy_origin.trim().isEmpty ? null : Uri.parse(proxy_origin),
+    upstream: upstream,
+    host: hostStr
   );
 
   var server = await app.serve(host, port);
